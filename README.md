@@ -16,3 +16,138 @@ Nginx Config Watcher 是一个用 Go 语言编写的程序，用于监控 Nginx 
 
 - `NGINX_MAIN_CONF`: Nginx 主配置文件的路径，默认为 `/etc/nginx/nginx.conf`。
 - `RELOAD_DIRS`: 需要监控的目录，多个目录可以用逗号分隔，默认为 `/etc/nginx`。
+
+## 运行要求
+#### nginx服务器
+- 在nginx服务器上直接运行时，无特殊要求
+#### kubernetes集群
+- nginx配置文件保存到`configmap`或`secret`，然后将配置以文件形式挂载到指定目录(必须)
+- 以sidercar形式运行本程序，基础镜像用带nginx的镜像即可
+- 共享主POD的进程信息到sidercar容器:`shareProcessNamespace: true`
+- sidercar和主POD都需要挂载配置文件
+
+#### 示例Deployment
+```
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rproxy
+  labels:
+    app: rproxy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rproxy
+  template:
+    metadata:
+      labels:
+        app: rproxy
+    spec:
+      shareProcessNamespace: true
+      imagePullSecrets:
+      - name: harbor-auth
+      containers:
+      - name: rproxy
+        image: youhub.com/nginx:base
+        command: ["nginx"]
+        args: ["-g", "daemon off;", "-c", "/etc/nginx/main/nginx.conf"]
+        ports:
+        - containerPort: 80
+        - containerPort: 443
+        volumeMounts:
+        - name: nginx-site
+          mountPath: /etc/nginx/vhost/
+        - name: examplecom-tls
+          mountPath: /etc/nginx/ssl/
+          readOnly: true
+        - name: nginx-main
+          mountPath: /etc/nginx/main
+        resources:
+          requests:
+            cpu: "0.1"
+            memory: "50Mi"
+          limits:
+            cpu: "1"
+            memory: "2048Mi"
+            ephemeral-storage: "30Gi"
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 3
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 3
+          periodSeconds: 5
+        startupProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 3
+          failureThreshold: 30
+          periodSeconds: 10
+      - name: nginx-reloader
+        image: harbor.wizbackstage.com/wiz-devops/nginx-reloader:latest
+        env:
+        - name: NGINX_MAIN_CONF
+          valueFrom:
+            configMapKeyRef:
+              name: nginx-reloader-config
+              key: NGINX_MAIN_CONF
+        - name: RELOAD_DIRS
+          valueFrom:
+            configMapKeyRef:
+              name: nginx-reloader-config
+              key: RELOAD_DIRS
+        volumeMounts:
+        - name: nginx-site
+          mountPath: /etc/nginx/vhost/
+        - name: examplecom-tls
+          mountPath: /etc/nginx/ssl/
+          readOnly: true
+        - name: nginx-main
+          mountPath: /etc/nginx/main
+        resources:
+          requests:
+            cpu: "0.1"
+            memory: "50Mi"
+          limits:
+            cpu: "1"
+            memory: "2048Mi"
+            ephemeral-storage: "30Gi"
+      volumes:
+      - name: nginx-main
+        configMap:
+          name: nginx-main
+      - name: nginx-site
+        configMap:
+          name: nginx-site
+      - name: examplecom-tls
+        secret:
+          secretName: examplecom-tls
+      - name: nginx-reloader-config
+        configMap:
+          name: nginx-reloader-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rproxy
+spec:
+  selector:
+    app: rproxy
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+      name: http
+    - protocol: TCP
+      port: 443
+      targetPort: 443
+      name: https
+  type: NodePort
+```
