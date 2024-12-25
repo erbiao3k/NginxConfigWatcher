@@ -31,24 +31,24 @@ Nginx Config Watcher 是一个用 Go 语言编写的程序，用于监控 Nginx 
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: rproxy
+  name: nginx-gateway
   labels:
-    app: rproxy
+    app: nginx-gateway
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: rproxy
+      app: nginx-gateway
   template:
     metadata:
       labels:
-        app: rproxy
+        app: nginx-gateway
     spec:
       shareProcessNamespace: true
       imagePullSecrets:
       - name: harbor-auth
       containers:
-      - name: rproxy
+      - name: nginx-gateway
         image: youhub.com/nginx:base
         command: ["nginx"]
         args: ["-g", "daemon off;", "-c", "/etc/nginx/main/nginx.conf"]
@@ -90,18 +90,18 @@ spec:
           initialDelaySeconds: 3
           failureThreshold: 30
           periodSeconds: 10
-      - name: nginx-reloader
-        image: harbor.wizbackstage.com/wiz-devops/nginx-reloader:latest
+      - name: nginx-config-watcher
+        image: youhub.com/devops/nginx-config-watcher:latest
         env:
         - name: NGINX_MAIN_CONF
           valueFrom:
             configMapKeyRef:
-              name: nginx-reloader-config
+              name: nginx-config-watcher-config
               key: NGINX_MAIN_CONF
         - name: RELOAD_DIRS
           valueFrom:
             configMapKeyRef:
-              name: nginx-reloader-config
+              name: nginx-config-watcher-config
               key: RELOAD_DIRS
         volumeMounts:
         - name: nginx-site
@@ -129,17 +129,17 @@ spec:
       - name: examplecom-tls
         secret:
           secretName: examplecom-tls
-      - name: nginx-reloader-config
+      - name: nginx-config-watcher-config
         configMap:
-          name: nginx-reloader-config
+          name: nginx-config-watcher-config
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: rproxy
+  name: nginx-gateway
 spec:
   selector:
-    app: rproxy
+    app: nginx-gateway
   ports:
     - protocol: TCP
       port: 80
