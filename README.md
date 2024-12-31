@@ -23,8 +23,8 @@ Nginx Config Watcher 是一个用 Go 语言编写的程序，用于监控 Nginx 
 #### kubernetes集群
 - nginx配置文件保存到`configmap`或`secret`，然后将配置以文件形式挂载到指定目录(必须)
 - 以sidercar形式运行本程序，基础镜像用带nginx的镜像即可
-- 共享主POD的进程信息到sidercar容器:`shareProcessNamespace: true`
-- sidercar和主POD都需要挂载配置文件
+- 共享主POD的进程信息到sidecar容器:`shareProcessNamespace: true`
+- sidecar和主POD都需要挂载配置文件
 
 #### 示例Deployment
 ```
